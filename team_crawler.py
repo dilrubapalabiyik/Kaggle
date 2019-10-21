@@ -4,12 +4,12 @@ from selenium.webdriver.common.by import By
 import time
 import os
 import pandas as pd
-
+import glob
 
 
 # a bunch of functions 
 
-def choose_per_game(driver,url,season):
+def choose_per_game(driver,url,season,season_type):
 
 	"""
 	this is the prerequisite step for the other steps, since the other dropdowns will appear only after clicking "get stats"
@@ -46,26 +46,27 @@ def choose_per_game(driver,url,season):
 	per_game.click()
 
 
-def get_scoring(driver,url,season):
+def get_scoring(driver,url,season,season_type):
 
 	"""
 	this is for getting csv for "scoring" category
 	"""
 
-	choose_per_game(driver,team_url,season)
+	choose_per_game(driver,team_url,season,season_type)
 	download_link_scoring = driver.find_element(By.XPATH,"//a[@download='pbpstats_export.csv']")
 	download_link_scoring.click()
 	time.sleep(1)
-	os.rename('pbpstats_export.csv', 'team_scoring_'+season+'.csv')
+	os.rename('pbpstats_export.csv','team_scoring_'+season+'.csv')
+	process_csv('team_scoring_'+season+'.csv',season,season_type)
 
 
-def get_assists(driver,url,season):
+def get_assists(driver,url,season,season_type):
 
 	"""
 	this is for getting csv for "Assists" category
 	"""
 
-	choose_per_game(driver,url,season)
+	choose_per_game(driver,url,season,season_type)
 	table_data_dropdown = driver.find_element(By.XPATH,"//main/div[4]/div[@class='row']/div[@class='col-md-2'][2]/div/div[@tabindex='0']/div[@class='multiselect__select']")
 	table_data_dropdown.click()
 	time.sleep(1)
@@ -76,14 +77,16 @@ def get_assists(driver,url,season):
 	download_link_assists.click()
 	time.sleep(1)
 	os.rename('pbpstats_export.csv', 'team_assists_'+season+'.csv')
+	process_csv('team_assists_'+season+'.csv',season,season_type)
 
-def get_rebounds(driver,url,season):
+
+def get_rebounds(driver,url,season,season_type):
 
 	"""
 	this is for getting csv for "Rebounds" category
 	"""
 
-	choose_per_game(driver,team_url,season)
+	choose_per_game(driver,team_url,season,season_type)
 	table_data_dropdown = driver.find_element(By.XPATH,"//main/div[4]/div[@class='row']/div[@class='col-md-2'][2]/div/div[@tabindex='0']/div[@class='multiselect__select']")
 	table_data_dropdown.click()
 	time.sleep(1)
@@ -94,16 +97,28 @@ def get_rebounds(driver,url,season):
 	download_link_rebounds.click()
 	time.sleep(1)
 	os.rename('pbpstats_export.csv', 'team_rebounds_'+season+'.csv')
+	process_csv('team_rebounds_'+season+'.csv',season,season_type)
 
+def process_csv(file_name,season,season_type):
+	"""
+	using pandas open generated csv file and add 2 extra cols, 
+	"season","season_type"(we potentially will need both regular season and playoffs)
+	"""
+	raw_file = pd.read_csv(file_name)
+	raw_file['season'] = season
+	raw_file['season_type'] = season_type
+
+	raw_file.to_csv(file_name,index=False)
 # `````````````````````````````````````````````````````````````````````````````````````````````````````````````````````
 
 
 # main body
 
-if __name__ == "main":
-
+if __name__ == "__main__":
+	print("here!")
 	chrome_options = webdriver.ChromeOptions()
-	download_dir = '/home/chenjie/Desktop/WebScraping/Team_CSVs'
+	os.chdir("/home/chenjie/Desktop/CSP571/Team_CSVs")
+	download_dir = '/home/chenjie/Desktop/CSP571/Team_CSVs'
 	prefs = {'download.default_directory' : download_dir} # setting download directory
 	chrome_options.add_experimental_option('prefs', prefs)  
 
@@ -112,12 +127,24 @@ if __name__ == "main":
 
 	year_list = ['2009-10','2010-11','2011-12','2012-13','2013-14','2014-15','2015-16','2016-17','2017-18','2018-19']
 
+	# year_list = ['2009-10','2010-11']
+
 	for n in year_list: 
 
-		get_scoring(driver,team_url,n)
-		get_assists(driver,team_url,n)
-		get_rebounds(driver,team_url,n)
+		get_scoring(driver,team_url,n,"regular season")
+		get_assists(driver,team_url,n,"regular season")
+		get_rebounds(driver,team_url,n,"regular season")
 
+	# file concatenations
 
+	scoring_files = [s for s in glob.glob('*scoring*.csv')]
+	combined_scoring_csv = pd.concat([pd.read_csv(s) for s in scoring_files ])
+	combined_scoring_csv.to_csv("Team_Scoring.csv",index=False)
 
+	assists_files = [s for s in glob.glob('*assists*.csv')]
+	combined_assists_csv = pd.concat([pd.read_csv(s) for s in assists_files ])
+	combined_assists_csv.to_csv("Team_Assists.csv",index=False)
 
+	rebounds_files = [s for s in glob.glob('*rebounds*.csv')]
+	combined_rebounds_csv = pd.concat([pd.read_csv(s) for s in rebounds_files ])
+	combined_rebounds_csv.to_csv("Team_Rebounds.csv",index=False)
