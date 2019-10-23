@@ -15,7 +15,7 @@ def choose_per_game(driver,url,season,season_type):
 	this is the prerequisite step for the other steps, since the other dropdowns will appear only after clicking "get stats"
 	"""
 	driver.get(url)
-	if(season !='2018-19'):   # select season first since it is not equal to the default season
+	if(season !='2019-20'):   # select season first since it is not equal to the default season
 		get_stats = driver.find_element(By.XPATH,"//button[contains(text(),'Get Stats')]")
 		get_stats.click()
 		time.sleep(1)
@@ -117,17 +117,18 @@ def process_csv(file_name,season,season_type):
 if __name__ == "__main__":
 	print("here!")
 	chrome_options = webdriver.ChromeOptions()
-	os.chdir("/home/chenjie/Desktop/CSP571/Team_CSVs")
-	download_dir = '/home/chenjie/Desktop/CSP571/Team_CSVs'
+
+	download_dir = "/home/chenjie/Desktop/CSP571/Team_CSVs" # change this to dir where you want to put your data
+	os.chdir(download_dir) 
 	prefs = {'download.default_directory' : download_dir} # setting download directory
 	chrome_options.add_experimental_option('prefs', prefs)  
 
-	driver = webdriver.Chrome('/home/chenjie/Desktop/WebScraping/NBA_PBP/chromedriver',chrome_options=chrome_options) # load Chrome driver here
+	driver = webdriver.Chrome('/home/chenjie/Desktop/CSP571/chromedriver',chrome_options=chrome_options) # load Chrome driver here
 	team_url = 'https://www.pbpstats.com/totals/nba/team' # initial page url
 
-	year_list = ['2009-10','2010-11','2011-12','2012-13','2013-14','2014-15','2015-16','2016-17','2017-18','2018-19']
+	# year_list = ['2009-10','2010-11','2011-12','2012-13','2013-14','2014-15','2015-16','2016-17','2017-18','2018-19']
 
-	# year_list = ['2009-10','2010-11']
+	year_list = ['2009-10','2010-11']
 
 	for n in year_list: 
 
