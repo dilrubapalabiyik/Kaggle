@@ -1,0 +1,81 @@
+---
+title: "Project_lasso"
+author: "Dilruba Palabiyik"
+date: "11/5/2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+install.packages('caret')
+library(caret)
+team<- read.csv("/Users/dilruba_p/Desktop/team_all.csv")
+head(team)
+team <- team[,-(70:73),drop=FALSE]
+team <- team[,-(1:3),drop=FALSE]
+team_train_row= createDataPartition(team$pct, p = 0.80, list = FALSE)
+varImp(mod_fit)
+team_train = team[team_train_row,]
+ team_test = team[-team_train_row,]
+```
+
+## Introducing the models
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+# models
+
+fit.lm = train(data = team_train, pct~., method = "lm")
+fit.lasso = train(data = team_train, pct~., method = "lasso")
+fit.ridge = train(data =team_train, pct~., method = "ridge")
+fit.lasso$results
+fit.lasso$bestTune
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+# models
+install.packages('glmnet')
+library(glmnet)
+
+
+grid <- 10^seq(10,-2,length=1000)
+team <- na.omit(team)
+lm_fit <- lm(pct ~ .,team_train) 
+lm_fit$coefficients
+vif(lm_fit)
+y <-team$pct
+str(y)
+x <- team%>% select(-pct) %>% data.matrix()
+x <- team %>%
+  select( assists, rebounds , efgpct, ptsputbacks, tspct , X3    ,loss  , shotqualityavg , ftsmade, nonheavefg3pct ) %>%
+  data.matrix()
+lasso.mod <-glmnet(x,team$pct,alpha=1,lambda = grid)
+coef(lasso.mod )
+cv_fit2<- cv.glmnet(x, y, alpha = 1, lambda = grid)
+plot(cv_fit2)
+bestlam=cv_fit2$lambda.min
+bestlam
+# glmnet() function standardizes the variables by default so that they are on the same scale.
+# If alpha=0 then a ridge regression model is fit, and if alpha=1 then a lasso model is fit.
+
+dim(coef(lasso.mod ))
+lasso.pred=predict(lasso.mod,s=bestlam,newx=)
+mse= mean((lasso.pred-y.test)^2)
+
+
+out=glmnet(all_x,all_y,alpha=1,lambda=grid)
+lasso.coef=predict(cv_fit2,type="coefficients",s=bestlam)
+lasso.coef
+```
