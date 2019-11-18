@@ -1,0 +1,322 @@
+---
+title: "Player_Classify"
+author: "Chenjie Li"
+date: "11/11/2019"
+output: pdf_document
+---
+
+```{r}
+# firts, let's connect R with our Postgres databse:
+library(RPostgreSQL)
+
+# create connection
+con <- dbConnect(PostgreSQL(), user= "lchenjie", dbname="csp571")
+
+# query to fetch players' stats
+
+Q = "select a.*,s.*,r.*,i.*
+from player_assists a, player_scoring s, player_rebounds r, player_info i
+where a.player_name = s.player_name and a.season_name=s.season_name and a.team_name = s.team_name and
+s.player_name = r.player_name and s.season_name=r.season_name and s.team_name = r.team_name and
+r.player_name = i.player_name; "
+
+# return results
+player_raw <- dbGetQuery(con,Q)
+```
+
+```{r}
+# remove duplicate cols
+players <- player_raw[, !duplicated(colnames(player_raw))]
+```
+
+```{r}
+library(dplyr)
+library(zoo)
+
+players_18 = players[players$season_name=='2018-19',]
+players_18
+sapply(players_18, class)
+```
+
+```{r}
+# ---------------- Data Cleaning and Transformation---------------------------#
+
+# convert height to meters 
+players_18$height <- sapply(strsplit(as.character(players_18$height),"-"),
+        function(x){0.3048*(as.numeric(x[1]) + 0.1*as.numeric(x[2]))})
+
+# replacing NA's with group mean's (e.g.: G = 1.9, F=2.05 etc)
+players_18$height <-na.aggregate(players_18$height,by=players_18$position)
+players_18$weight <-na.aggregate(players_18$weight,by=players_18$position)
+```
+
+
+```{r}
+# get numerical data to perform correlation analysis
+num_players_18 <- players_18[, sapply(players_18, class) != "character"]
+head(num_players_18)
+```
+
+## Find heavily correlated cols and remove some 
+
+```{r}
+# define a function to extract correlated pairs
+cor_extract <-function(df,thre){
+  cor_mat <- cor(df)
+  for (i in 1:nrow(cor_mat)){
+  correlations <-  which((cor_mat[i,] > thre) & (cor_mat[i,] != 1))
+  
+  if(length(correlations)> 0){
+    print(colnames(df)[i])
+    print(correlations)
+  }
+}
+}
+
+cor_extract(num_players_18,0.8)
+```
+
+```{r}
+
+
+# based on the observations of the results above, delete some highly correlated cols
+
+excluding_cols = c("points","minutes","offposs","assists","assistpoints","assists2pt","assists3pt","fg2m","fg2a","fg3m","fg3a","nonputbacksassisted2spct","efgpct","rebounds","ftdefrebounds","def2ptrebounds","def3ptrebounds","deffgreboundpct","defrebounds","offrebounds","ftoffrebounds","off2ptrebounds","off3ptrebounds","offfgreboundpct")
+subset_players_18 <- players_18[ , -which(names(players_18) %in% excluding_cols)]
+
+subset_num_players_18 <- subset_players_18[, sapply(subset_players_18, class) != "character"]
+cor_extract(subset_num_players_18,0.8)
+```
+
+```{r}
+#PCA for the data from season 2018-19
+# players_18$position <- as.factor(players_18$position)
+
+for(i in 1:ncol(subset_num_players_18)){
+  subset_num_players_18[is.na(subset_num_players_18[,i]), i] <- mean(subset_num_players_18[,i], na.rm = TRUE)
+}
+
+players_18.pr <-prcomp(subset_num_players_18, center = TRUE, scale = TRUE)
+
+summary(players_18.pr)
+```
+
+```{r}
+plot(players_18.pr$x[,1],players_18.pr$x[,2], xlab="PC1 (29.63%)", ylab = "PC2 (17.8%)", main = "PC1 / PC2 - plot")
+```
+
+```{r}
+library("factoextra")
+jpeg("/home/chenjie/Desktop/CSP571/Clustering/Figs/2018-19_pca.jpg")
+fviz_pca_ind(players_18.pr, geom.ind = "point", pointshape = 21, 
+             pointsize = 2, 
+             fill.ind = players_18$position, 
+             col.ind = "black", 
+             palette = "jco", 
+             addEllipses = TRUE,
+             label = "var",
+             col.var = "black",
+             repel = TRUE,
+             legend.title = "Diagnosis") +
+  ggtitle("2D PCA-plot from 66 feature dataset") +
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()
+
+```
+
+```{r}
+set.seed(123)
+# LDAfor the data from season 2018-19
+library(caret)
+
+# split traning/testing data 4:1
+training_18_index <- createDataPartition(subset_players_18$position,p=0.8,list=FALSE)
+train_18 <- subset_players_18[training_18_index,]
+test_18 <- subset_players_18[-training_18_index,]
+train_num_18 <- train_18[, sapply(train_18, class) != "character"]
+test_num_18 <- test_18[,sapply(test_18, class) != "character"]
+
+char_names <-names(train_18[, sapply(train_18, class) != "character"])
+```
+
+```{r}
+# run model
+library(MASS)
+f <- paste("position ~", paste(char_names, collapse=" + "))
+lda_18 <- lda(as.formula(paste(f)), data = train_18)
+```
+
+```{r,warning=FALSE, }
+library(pROC)
+library(e1071)
+# lda_18.predict
+lda_18.predict <- predict(lda_18, newdata = test_18)
+```
+
+
+```{r}
+# Confusion Matrix
+confusionMatrix(table(lda_18.predict$class,test_18$position),mode = "everything")
+```
+
+```{r}
+# visualize roc for each class
+roc.multi <- multiclass.roc(predictor=lda_18.predict$posterior[,1], response=test_18$position)
+
+cat("the AUC value for LDA with raw variables is ",roc.multi$auc)
+```
+
+```{r}
+# now trying LDA using PCA variables
+pca_df <- players_18.pr$x[,1:18]
+pca_df <- cbind(pca_df, players_18$position)
+pca_df <- as.data.frame(pca_df)
+head(pca_df)
+```
+
+```{r}
+set.seed(123)
+colnames(pca_df)[19] <- "position"
+pca_train_index <- createDataPartition(pca_df$position, p=0.8, list = FALSE)
+
+cols = c(seq(1,18,by=1));    
+pca_df[,cols] = apply(pca_df[,cols], 2, function(x) as.numeric(as.character(x)));
+
+pca_train_df <- pca_df[pca_train_index,]
+pca_test_df <- pca_df[-pca_train_index,]
+
+pca_lda <- lda(position~., data = pca_train_df)
+```
+
+```{r}
+pca_lda.predict <- predict(pca_lda, newdata = pca_test_df)
+confusionMatrix(table(pca_lda.predict$class,pca_test_df$position),mode = "everything")
+```
+
+```{r}
+library(pROC)
+pca_roc.multi <- multiclass.roc(predictor=pca_lda.predict$posterior[,1], response=pca_test_df$position)
+cat("the AUC value for LDA with raw variables is ",pca_roc.multi$auc)
+```
+
+
+```{r}
+
+# cross validation to compare 2 models (LDA_all_variables VS PCA_LDA)
+library(caret)
+
+# LDA_all_variables
+
+set.seed(1234)
+
+head(train_18)
+
+ctrl <- trainControl(method = "cv",
+                     number = 10,
+                     returnResamp = "all")
+
+boot_mod <- train(as.formula(paste(f)), data = train_18,
+         method = "lda",
+         trControl = ctrl)
+
+boot_mod$results$Accuracy
+```
+
+
+```{r}
+
+library(caret)
+
+# PCA_LDA
+
+set.seed(1234)
+
+head(train_18)
+
+ctrl <- trainControl(method = "cv",
+                     number = 10,
+                     returnResamp = "all")
+
+boot_mod <- train(position~., data = pca_train_df,
+         method = "lda",
+         trControl = ctrl)
+
+boot_mod
+```
+
+from the results above, we could conclude that using "PCA_LDA" model is slightly better, thus we will use this model to preceed to do k-means clustering.
+
+
+
+
+```{r}
+library(cluster)
+#Elbow Method for finding the optimal number of clusters
+set.seed(123)
+# Compute and plot wss for k = 2 to k = 15.
+k.max <- 15
+# drop position
+pca_df_num <- pca_df [ , !(names(pca_df) %in% "position")]
+data <- pca_df_num
+wss <- sapply(1:k.max, 
+              function(k){kmeans(data, k, nstart=20,iter.max = 15 )$tot.withinss})
+wss
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+```{r}
+
+silhouette_score <- function(k){
+  km <- kmeans(pca_df_num, centers = k, nstart=25)
+  ss <- silhouette(km$cluster, dist(pca_df_num))
+  mean(ss[, 3])
+}
+```
+
+```{r}
+k <- 2:15
+avg_sil <- sapply(k, silhouette_score)
+plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette Scores', frame=FALSE)
+
+```
+
+```{r}
+
+# Elbow method
+# n_clust <- fviz_nbclust(pca_df_num, kmeans, method = "wss")
+# 
+# n_clust
+# Silhouette method
+# fviz_nbclust(pca_df_num, kmeans, method = "silhouette")+
+#   labs(subtitle = "Silhouette method")
+
+# Gap statistic
+# nboot = 50 to keep the function speedy.
+# recommended value: nboot= 500 for your analysis.
+# Use verbose = FALSE to hide computing progression.
+set.seed(123)
+
+kcluster = clusGap(pca_df_num,FUNcluster = kmeans, nstart = 25, K.max = 15, B = 50)    
+k_chosen <- maxSE(f = kcluster$Tab[, "gap"], SE.f = kcluster$Tab[, "SE.sim"])
+```
+
+
+```{r}
+km <- kmeans(pca_df_num, centers = k_chosen, nstart=25)
+subset_players_18$cluster <-km$cluster
+subset_players_18[c("player_name","cluster")]
+# write.csv(subset_players_18,'players_18.csv')
+
+library(ggplot2)
+subset_players_18$cluster <- as.factor(subset_players_18$cluster)
+subset_players_18$d1 <- pca_df_num$PC1
+subset_players_18$d2 <- pca_df_num$PC2
+
+
+ggplot(subset_players_18, aes(x= d1, y= d2, colour= cluster, label=player_name))+
+  geom_point() + ggtitle("test")
+
+```
