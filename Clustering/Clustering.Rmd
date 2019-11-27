@@ -11,7 +11,8 @@ library(RPostgreSQL)
 library(MASS)
 library("factoextra")
 library(caret)
-
+library(zoo)
+library(cluster)
 # create connection
 con <- dbConnect(PostgreSQL(), user= "lchenjie", dbname="csp571")
 
@@ -46,6 +47,9 @@ player_clustering <- function(season_name,figure_dir,multiple_season=FALSE){
       players = players_all[players_all$season_name==season_name,]
   }
   
+  players = players[players$gamesplayed>40,]
+  players = players[players$minutes/players$gamesplayed > 10,]
+  print(players)
   # ---------------- Data Cleaning and Transformation---------------------------#
 
   # convert height to meters 
@@ -73,7 +77,7 @@ player_clustering <- function(season_name,figure_dir,multiple_season=FALSE){
   players.pr <-prcomp(subset_num_players, center = TRUE, scale = TRUE)
   # Create a figure and save it # 
   # create the dir and save this figure
-  
+  print(summary(players.pr))
   if(multiple_season){
     jpeg(paste(paste(paste(figure_dir,"/pca1-pca2",sep = ''),season_name[1],sep = '_'),'.jpg',sep=''))
   }else{
@@ -108,13 +112,13 @@ player_clustering <- function(season_name,figure_dir,multiple_season=FALSE){
   lda <- lda(as.formula(paste(f)), data = lda_train)
   
   # Create pca_df
-  pca_df <- players.pr$x[,1:20]
+  pca_df <- players.pr$x[,1:5]
   pca_df <- cbind(pca_df, subset_players$position)
   pca_df <- as.data.frame(pca_df)
-  colnames(pca_df)[21] <- "position"
+  colnames(pca_df)[6] <- "position"
   pca_train_index <- createDataPartition(pca_df$position, p=0.8, list = FALSE)
 
-  cols = c(seq(1,20,by=1));    
+  cols = c(seq(1,5,by=1));    
   pca_df[,cols] = apply(pca_df[,cols], 2, function(x) as.numeric(as.character(x)));
   
   pca_train_df <- pca_df[pca_train_index,]
@@ -173,11 +177,15 @@ player_clustering <- function(season_name,figure_dir,multiple_season=FALSE){
 ```
 
 ```{r}
-x = player_clustering("2009-10","/home/chenjie/Desktop/CSP571/Clustering/Figs")
-write.csv(x,"/home/chenjie/Desktop/CSP571/Clustering/Figs/09-10.csv")
+# x = player_clustering("2009-10","/home/chenjie/Desktop/CSP571/Clustering/Figs")
+# write.csv(x,"/home/chenjie/Desktop/CSP571/Clustering/Figs/09-10.csv")
 ```
 
 
 ```{r}
+x = player_clustering(list("2009-10","2010-11","2011-12","2012-13","2013-14"),"/home/chenjie/Desktop/CSP571/Clustering/Figs",multiple_season = TRUE)
+write.csv(x,"/home/chenjie/Desktop/CSP571/Clustering/Figs/09-10.csv")
 
+x = player_clustering(list("2014-15","2015-16","2016-17","2017-18","2018-19"),"/home/chenjie/Desktop/CSP571/Clustering/Figs",multiple_season = TRUE)
+write.csv(x,"/home/chenjie/Desktop/CSP571/Clustering/Figs/14-18.csv")
 ```

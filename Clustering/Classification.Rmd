@@ -33,8 +33,9 @@ players <- player_raw[, !duplicated(colnames(player_raw))]
 library(dplyr)
 library(zoo)
 
-players_18 = players[players$season_name=='2018-19',]
-players_18
+players_18 = players[(players$season_name=='2018-19'|players$season_name=='2017-18'|players$season_name=='2016-17'|players$season_name=='2015-16'|players$season_name=='2014-15'),]
+players_18 = players_18[players_18$gamesplayed>40,]
+players_18 = players_18[players_18$minutes/players_18$gamesplayed > 10,]
 sapply(players_18, class)
 ```
 
@@ -286,17 +287,21 @@ plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette S
 ```{r}
 
 # Elbow method
-# n_clust <- fviz_nbclust(pca_df_num, kmeans, method = "wss")
-# 
-# n_clust
+fviz_nbclust(pca_df_num, kmeans, method = "wss") +
+    geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
 # Silhouette method
-# fviz_nbclust(pca_df_num, kmeans, method = "silhouette")+
-#   labs(subtitle = "Silhouette method")
+fviz_nbclust(pca_df_num, kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
 
 # Gap statistic
-# nboot = 50 to keep the function speedy.
+# nboot = 50 to keep the function speedy. 
 # recommended value: nboot= 500 for your analysis.
 # Use verbose = FALSE to hide computing progression.
+set.seed(123)
+fviz_nbclust(pca_df_num, kmeans, nstart = 25,  method = "gap_stat", nboot = 50)+
+  labs(subtitle = "Gap statistic method")
 set.seed(123)
 
 kcluster = clusGap(pca_df_num,FUNcluster = kmeans, nstart = 25, K.max = 15, B = 50)    
