@@ -112,10 +112,10 @@ player_clustering <- function(season_name,figure_dir,multiple_season=FALSE){
   lda <- lda(as.formula(paste(f)), data = lda_train)
   
   # Create pca_df
-  pca_df <- players.pr$x[,1:5]
+  pca_df <- players.pr$x[,1:18]
   pca_df <- cbind(pca_df, subset_players$position)
   pca_df <- as.data.frame(pca_df)
-  colnames(pca_df)[6] <- "position"
+  colnames(pca_df)[19] <- "position"
   pca_train_index <- createDataPartition(pca_df$position, p=0.8, list = FALSE)
 
   cols = c(seq(1,5,by=1));    
@@ -174,11 +174,6 @@ player_clustering <- function(season_name,figure_dir,multiple_season=FALSE){
   
   subset_players
 }
-```
-
-```{r}
-# x = player_clustering("2009-10","/home/chenjie/Desktop/CSP571/Clustering/Figs")
-# write.csv(x,"/home/chenjie/Desktop/CSP571/Clustering/Figs/09-10.csv")
 ```
 
 

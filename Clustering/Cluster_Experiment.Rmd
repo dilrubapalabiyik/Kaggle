@@ -55,7 +55,6 @@ players_18$weight <-na.aggregate(players_18$weight,by=players_18$position)
 ```{r}
 # get numerical data to perform correlation analysis
 num_players_18 <- players_18[, sapply(players_18, class) != "character"]
-head(num_players_18)
 ```
 
 ## Find heavily correlated cols and remove some 
@@ -172,7 +171,6 @@ cat("the AUC value for LDA with raw variables is ",roc.multi$auc)
 pca_df <- players_18.pr$x[,1:18]
 pca_df <- cbind(pca_df, players_18$position)
 pca_df <- as.data.frame(pca_df)
-head(pca_df)
 ```
 
 ```{r}
@@ -210,7 +208,6 @@ library(caret)
 
 set.seed(1234)
 
-head(train_18)
 
 ctrl <- trainControl(method = "cv",
                      number = 10,
@@ -232,7 +229,6 @@ library(caret)
 
 set.seed(1234)
 
-head(train_18)
 
 ctrl <- trainControl(method = "cv",
                      number = 10,
@@ -284,17 +280,7 @@ plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette S
 
 ```
 
-```{r}
-
-# Elbow method
-fviz_nbclust(pca_df_num, kmeans, method = "wss") +
-    geom_vline(xintercept = 4, linetype = 2)+
-  labs(subtitle = "Elbow method")
-
-# Silhouette method
-fviz_nbclust(pca_df_num, kmeans, method = "silhouette")+
-  labs(subtitle = "Silhouette method")
-
+```{r,warning=FALSE}
 # Gap statistic
 # nboot = 50 to keep the function speedy. 
 # recommended value: nboot= 500 for your analysis.
@@ -312,8 +298,6 @@ k_chosen <- maxSE(f = kcluster$Tab[, "gap"], SE.f = kcluster$Tab[, "SE.sim"])
 ```{r}
 km <- kmeans(pca_df_num, centers = k_chosen, nstart=25)
 subset_players_18$cluster <-km$cluster
-subset_players_18[c("player_name","cluster")]
-# write.csv(subset_players_18,'players_18.csv')
 
 library(ggplot2)
 subset_players_18$cluster <- as.factor(subset_players_18$cluster)
