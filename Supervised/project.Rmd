@@ -1,0 +1,91 @@
+---
+title: "project"
+author: "Qiao"
+date: "November 11, 2019"
+output: pdf_document
+---
+
+```{r}
+library(caret)
+library(glm2)
+library(glmnet)
+library(Metrics)
+set.seed(1)
+team <- read.csv("/home/qiaoqiao/Desktop/basketball/CSP571/final.csv" , sep=",", header=T)
+train <- createDataPartition(team$pct, p = 0.8,list=FALSE)
+team.train <- team[train, ]
+team.test <- team[-train, ]
+team.fit <- lm(pct~., data = team.train)
+summary(team.fit)
+predict_0 <- predict(team.fit,team.train,type = "response")
+prediction<-ifelse(predict_0<=0.5,0,1)
+true<-ifelse(team.train$pct<=0.5,0,1)
+confusionMatrix(table(prediction, true),mode="everything")
+mse(team.test$pct,predict_0)
+
+predict_1 <- predict(team.fit,team.test,type = "response")
+prediction<-ifelse(predict_1<=0.5,0,1)
+true<-ifelse(team.test$pct<=0.5,0,1)
+confusionMatrix(table(prediction, true),mode="everything")
+mse(team.test$pct,predict_1)
+
+predict_1 <- predict(team.fit,team.test,type = "response")
+prediction<-ifelse(predict_1<=0.7,0,1)
+true<-ifelse(team.test$pct<=0.7,0,1)
+confusionMatrix(table(prediction, true),mode="everything")
+mse(team.test$pct,predict_1)
+
+
+# fit0 <- lm(pct~OffPoss+PtsPutbacks+Assisted3sPct+Off2ptReboundPct+OffShortMidRangeReboundPct, data = team.train)
+# summary(fit0)
+
+
+
+
+
+fit <- glm(pct~., data = team.train, family = binomial)
+summary(fit)
+predict_fit <- predict(fit, team.train,type ="response")
+prediction_fit<-ifelse(predict_fit<=0.5,0,1)
+true<-ifelse(team.train$pct<=0.5,0,1)
+confusionMatrix(table(prediction_fit, true),mode="everything")
+mse(team.test$pct,predict_fit)
+
+predict_fit_1 <- predict(fit, team.test,type ="response")
+prediction_fit_1<-ifelse(predict_fit_1<=0.5,0,1)
+true_1<-ifelse(team.test$pct<=0.5,0,1)
+confusionMatrix(table(prediction_fit_1, true_1),mode="everything")
+mse(team.test$pct,predict_fit_1)
+
+predict_fit_2 <- predict(fit, team.test,type ="response")
+prediction_fit_2<-ifelse(predict_fit_2<=0.7,0,1)
+true_2<-ifelse(team.test$pct<=0.7,0,1)
+confusionMatrix(table(prediction_fit_2, true_2),mode="everything")
+mse(team.test$pct,predict_fit_2)
+# fit1 <- glm(pct~OffPoss+PtsAssisted3s+Assisted3sPct+Corner3Assists, data = team.train, family = binomial)
+# summary(fit1)
+# predict_fit <- predict(fit1, team.train,type ="response")
+# prediction<-ifelse(predict_fit<=0.5,0,1)
+# true<-ifelse(team.train$pct<=0.5,0,1)
+# confusionMatrix(table(prediction, true),mode="everything")
+
+# grid<-seq(0,10,0.01)
+# y <- team.train$pct
+# x <- model.matrix(team.train$pct ~OffPoss+PtsPutbacks+Assisted3sPct+Off2ptReboundPct+OffShortMidRangeReboundPct, data = team.train)[, -1]
+# lasso_fit <- glmnet(x, y, alpha = 1, lambda = grid)
+# cross.validation <- cv.glmnet(x, y, alpha = 1,lambda = grid)
+# minimum.lambda <- cross.validation$lambda.min
+# cat("minimum lambda", minimum.lambda, "\n")
+# x.test <- model.matrix(team.test$pct ~OffPoss+PtsPutbacks+Assisted3sPct+Off2ptReboundPct+OffShortMidRangeReboundPct, data = team.test)[, -1]
+# lasso_pred <- predict(lasso_fit, s = minimum.lambda, newx = x.test)
+# 
+# cat("test MSE" , mse(team.test$pct, lasso_pred), "\n")
+# 
+# lasso.mod <- glmnet(x, y, alpha = 1)
+# coefs <- predict(lasso.mod, type = "coefficients", s = minimum.lambda)
+# coefs
+# library(corrplot)
+# correlations <- cor(team[,2:8])
+# corrplot(correlations, method="circle")
+```
+

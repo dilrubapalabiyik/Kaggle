@@ -1,0 +1,186 @@
+---
+title: "Project"
+author: "Dilruba Palabiyik"
+date: "11/12/2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+library(caret)
+library(glmnet)
+library(dplyr)
+library(tidyverse)
+library(knitr)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(corrplot)
+library(caret)
+library(gridExtra)
+library(scales)
+
+library(randomForest)
+
+set.seed(27042018)
+
+team<- read.csv("/Users/dilruba_p/Desktop/team_all.csv")
+excluding_cols = c("points","minutes","offposs","assists","assistpoints","assists2pt","assists3pt","fg2m","fg2a","fg3m","fg3a","nonputbacksassisted2spct","efgpct","rebounds","ftdefrebounds","def2ptrebounds","def3ptrebounds","deffgreboundpct","defrebounds","offrebounds","ftoffrebounds","off2ptrebounds","off3ptrebounds","offfgreboundpct","away","conf","div","loss","X3","diff","home")
+
+team<-team[ , !(names(team) %in% excluding_cols)]
+
+
+
+numericVars <- which(sapply(team, is.numeric)) #index vector numeric variables
+factorVars <- which(sapply(team, is.factor)) #index vector factor variables
+cat('There are', length(numericVars), 'numeric variables, and', length(factorVars), 'categoric variables')
+lassoGrid <- expand.grid(alpha = 1, lambda = seq(0.001,0.1,by = 0.0005))
+
+team_train_row= createDataPartition(team$pct, p = 0.80, list = FALSE)
+team_train = team[team_train_row,]
+team_test = team[-team_train_row,]
+all_numVar <- team[, numericVars]
+cor_numVar <- cor(all_numVar, use="pairwise.complete.obs") #correlations of all numeric variables
+
+
+
+cor_sorted <- as.matrix(sort(cor_numVar[,'pct'], decreasing = TRUE))
+
+CorHigh <- names(which(apply(cor_sorted, 1, function(x) abs(x)>0.4)))
+cor_numVar <- cor_numVar[CorHigh, CorHigh]
+
+corrplot.mixed(cor_numVar, tl.col="black", tl.pos = "lt", tl.cex = 0.7,cl.cex = .7, number.cex=.7)
+
+
+features<- team[ , -which(names(team) %in% c("pct"))]%>%data.matrix()
+y<-as.factor(x$pct)
+my_control <-trainControl(method="cv", number=5)
+lasso_mod <- train( pct ~  .,  data=team, method="glmnet",trControl = my_control, tuneGrid=lassoGrid)
+
+lasso_mod$bestTune
+
+min(lasso_mod$results$RMSE)
+
+head(lasso_mod$results)
+LassoPred <- predict(lasso_mod, team_test)
+predictions_lasso <- exp(LassoPred) #need to reverse the log to the real values
+head(predictions_lasso_)
+grid <- 10^seq(10,-2,length=1000)
+y<- team$pct
+x<-team[, !names(team) %in% c("pct")] %>%data.matrix()
+cv_fit<- cv.glmnet(x, y, alpha = 1, lambda =grid)
+plot(cv_fit_f)
+bestlam=cv_fit$lambda.min
+bestlam
+
+lasso.pred_1=predict(lasso_mod,s=bestlam,newx=x)
+mse= mean((lasso.pred1-team$pct)^2)
+prediction_1<-ifelse(lasso.pred_1<=0.5,0,1)
+plot(hist(resid(lasso_mod_f)))
+true<-ifelse(team_forest$pct<=0.5,0,1)
+confusionMatrix(table(prediction_1,true),mode='everything')
+
+
+
+lassoVarImp <- varImp(lasso_mod,scale=F)
+lassoImportance <- lassoVarImp$importance
+
+varsSelected <- length(which(lassoImportance$Overall!=0))
+varsNotSelected <- length(which(lassoImportance$Overall==0))
+
+cat('Lasso uses', varsSelected, 'variables in its model, and did not select', varsNotSelected, 'variables.')
+#selecting important variables with a quick random forest 
+
+set.seed(2018)
+quick_RF <- randomForest(x=features, y=team$pct, ntree=100,importance=TRUE)
+imp_RF <- importance(quick_RF)
+imp_DF <- data.frame(Variables = row.names(imp_RF), MSE = imp_RF[,1])
+imp_DF <- imp_DF[order(imp_DF$MSE, decreasing = TRUE),]
+ggplot(imp_DF[1:20,], aes(x=reorder(Variables, MSE), y=MSE, fill=MSE)) + geom_bar(stat = 'identity') + labs(x = 'Variables',
+      y= '% increase MSE if variable is randomly permuted') + coord_flip() + theme(legend.position="none")
+features<-scale(features)
+
+s1 <- ggplot(data= team, aes(x=efgpct)) +
+geom_density() + labs(x='Effective Field Goal Percentage')
+
+s3 <- ggplot(data= team, aes(x=def2ptrebounds)) +
+  geom_density() + labs(x='2 point Defensive rebound')
+s4 <- ggplot(data= team, aes(x=ppg)) +
+  geom_density() + labs(x='PPG')
+s5 <- ggplot(data= team, aes(x=fg3pct)) +
+  geom_density() + labs(x='3 point field goal percentage')
+
+source("http://peterhaschke.com/Code/multiplot.R")
+multiplot(s1, s3, s4,s5 ,cols=2)
+
+
+
+team_forest<-team[ , which(names(team) %in% c("pct",
+  "tspct","opp_ppg","fg2pct","ppg","fg3pct","nonheavefg3pct","corner3assists","off3ptreboundpct",
+  "offarc3reboundpct","def2ptreboundpct","offcorner3reboundpct","fg2ablocked", "fg3apct"
+                                  ))]
+
+numericVars_forest <- which(sapply(team_forest, is.numeric)) #index vector numeric variables
+factorVars_forest <- which(sapply(team_forest, is.factor)) #index vector factor variables
+cat('There are', length(numericVars_forest), 'numeric variables, and', length(factorVars_forest), 'categoric variables')
+lassoGrid <- expand.grid(alpha = 1, lambda = seq(0.001,0.1,by = 0.0005))
+
+team_train_row_f= createDataPartition(team_forest$pct, p = 0.80, list = FALSE)
+team_train_f = team_forest[team_train_row_f,]
+team_test_f = team_forest[-team_train_row_f,]
+all_numVar_2 <- team_forest[, numericVars_forest]
+cor_numVar_2 <- cor(all_numVar_2, use="pairwise.complete.obs") #correlations of all numeric variables
+
+
+
+cor_sorted_f <- as.matrix(sort(cor_numVar_2[,"pct"], decreasing = TRUE))
+
+CorHigh_f <- names(which(apply(cor_sorted_f, 1, function(x) abs(x)>0.3)))
+cor_numVar_f <- cor_numVar[CorHigh_f, CorHigh_f]
+
+corrplot.mixed(cor_numVar_f, tl.col="black", tl.pos = "lt", tl.cex = 0.7,cl.cex = .7, number.cex=.7)
+
+
+features<- x[ , -which(names(x) %in% c("pct"))]%>%data.matrix()
+
+my_control <-trainControl(method="cv", number=5)
+lasso_mod_f <- train( pct ~  .,  data=team_forest, method="glmnet",trControl = my_control, tuneGrid=lassoGrid)
+
+lasso_mod$bestTune
+
+head(lasso_mod_f$results)
+LassoPred_f <- predict(lasso_mod_f, team_test_f)
+predictions_lasso_f <- exp(LassoPred_f) #need to reverse the log to the real values
+head(predictions_lasso_f)
+grid <- 10^seq(10,-2,length=1000)
+y<-factor(team_forest$pct)
+x<-team_forest[, !names(team_forest) %in% c("pct")] %>%data.matrix()
+cv_fit_f<- cv.glmnet(x, y, alpha = 1, lambda =grid)
+plot(cv_fit_f)
+bestlam=cv_fit_f$lambda.min
+bestlam
+
+lasso.pred=predict(lasso_mod_f,s=bestlam,newx=x)
+mse= mean((lasso.pred-team_forest$pct)^2)
+mse
+prediction<-ifelse(lasso.pred<=0.5,0,1)
+plot(hist(resid(lasso_mod_f)))
+true<-ifelse(team_forest$pct<=0.5,0,1)
+confusionMatrix(table(prediction,true),mode='everything')
+
+
+
+
+
+```
+

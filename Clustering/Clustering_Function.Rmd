@@ -1,0 +1,186 @@
+---
+title: "Clustering"
+author: "Chenjie Li"
+date: "11/17/2019"
+output: pdf_document
+---
+
+## First Step : Establish Connection
+```{r}
+library(RPostgreSQL)
+library(MASS)
+library("factoextra")
+library(caret)
+library(zoo)
+library(cluster)
+# create connection
+con <- dbConnect(PostgreSQL(), user= "lchenjie", dbname="csp571")
+
+# query to fetch players' stats
+
+Q = "select a.*,s.*,r.*,i.*
+from player_assists a, player_scoring s, player_rebounds r, player_info i
+where a.player_name = s.player_name and a.season_name=s.season_name and a.team_name = s.team_name and
+s.player_name = r.player_name and s.season_name=r.season_name and s.team_name = r.team_name and
+r.player_name = i.player_name; "
+
+# return results
+player_raw <- dbGetQuery(con,Q)
+
+# remove duplicate cols
+players_all <- player_raw[, !duplicated(colnames(player_raw))]
+```
+
+
+```{r}
+player_clustering <- function(season_name,figure_dir,multiple_season=FALSE){
+  set.seed(1)
+  # -------------------Get data in chosen season -------------------------------#
+  
+  if(multiple_season){
+    players <- players_all[players_all$season_name==season_name[1],]
+    for (s in 2:length(season_name)){
+      players1 = players_all[players_all$season_name==season_name[s],]
+      players = rbind(players,players1)
+    }
+  }else{
+      players = players_all[players_all$season_name==season_name,]
+  }
+  
+  players = players[players$gamesplayed>40,]
+  players = players[players$minutes/players$gamesplayed > 10,]
+  print(players)
+  # ---------------- Data Cleaning and Transformation---------------------------#
+
+  # convert height to meters 
+  players$height <- sapply(strsplit(as.character(players$height),"-"),
+          function(x){0.3048*(as.numeric(x[1]) + 0.1*as.numeric(x[2]))})
+  
+  # replacing NA's with group mean's (e.g.: G = 1.9, F=2.05 etc), and double check to replace na with means
+  players$height <-na.aggregate(players$height,by=players$position)
+  players$weight <-na.aggregate(players$weight,by=players$position)
+  
+
+  # ------------Delete Correlated Variables(got from previous program)----------#
+  
+  excluding_cols = c("points","minutes","offposs","assists","assistpoints","assists2pt","assists3pt","fg2m","fg2a","fg3m","fg3a","nonputbacksassisted2spct","efgpct","rebounds","ftdefrebounds","def2ptrebounds","def3ptrebounds","deffgreboundpct","defrebounds","offrebounds","ftoffrebounds","off2ptrebounds","off3ptrebounds","offfgreboundpct")
+  subset_players <- players[ , -which(names(players) %in% excluding_cols)]
+  subset_num_players <- subset_players[, sapply(subset_players, class) != "character"]
+
+  
+  # replace NA (if existed) with mean's
+  for(i in 1:ncol(subset_num_players)){
+    subset_players[is.na(subset_num_players[,i]), i] <- mean(subset_num_players[,i], na.rm = TRUE)
+  }
+  
+  # Run PCA
+  players.pr <-prcomp(subset_num_players, center = TRUE, scale = TRUE)
+  # Create a figure and save it # 
+  # create the dir and save this figure
+  print(summary(players.pr))
+  if(multiple_season){
+    jpeg(paste(paste(paste(figure_dir,"/pca1-pca2",sep = ''),season_name[1],sep = '_'),'.jpg',sep=''))
+  }else{
+    jpeg(paste(paste(paste(figure_dir,"/pca1-pca2",sep = ''),season_name,sep = '_'),'.jpg',sep=''))
+}
+  fviz_pca_ind(players.pr, geom.ind = "point", pointshape = 21, 
+               pointsize = 2, 
+               fill.ind = subset_players$position, 
+               col.ind = "black", 
+               palette = "jco", 
+               addEllipses = TRUE,
+               label = "var",
+               col.var = "black",
+               repel = TRUE,
+               legend.title = "Diagnosis") +
+    ggtitle("2D PCA-plot from features") +
+    theme(plot.title = element_text(hjust = 0.5))
+  dev.off()
+  # lda for data set variables 
+  
+  # split traning/testing data 4:1
+  training_index <- createDataPartition(subset_players$position,p=0.75,list=FALSE)
+  lda_train <- subset_players[training_index,]
+  lda_test <- subset_players[-training_index,]
+  train_num <- lda_train[, sapply(lda_train, class) != "character"]
+  test_num <- lda_test[,sapply(lda_test, class) != "character"]
+  
+  char_names <-names(lda_train[, sapply(lda_train, class) != "character"])
+
+    # run model
+  f <- paste("position ~", paste(char_names, collapse=" + "))
+  lda <- lda(as.formula(paste(f)), data = lda_train)
+  
+  # Create pca_df
+  pca_df <- players.pr$x[,1:18]
+  pca_df <- cbind(pca_df, subset_players$position)
+  pca_df <- as.data.frame(pca_df)
+  colnames(pca_df)[19] <- "position"
+  pca_train_index <- createDataPartition(pca_df$position, p=0.8, list = FALSE)
+
+  cols = c(seq(1,5,by=1));    
+  pca_df[,cols] = apply(pca_df[,cols], 2, function(x) as.numeric(as.character(x)));
+  
+  pca_train_df <- pca_df[pca_train_index,]
+  pca_test_df <- pca_df[-pca_train_index,]
+  
+  pca_lda <- lda(position~., data = pca_train_df)
+  
+  # train control with cv to get accuracy for lda and pca_lda
+  
+  # lda traincontrol
+  
+  lda_ctrl <- trainControl(method = "cv",
+                       number = 10,
+                       returnResamp = "all")
+  
+  lda_mod <- train(as.formula(paste(f)), data = lda_train,
+           method = "lda",
+           trControl = lda_ctrl)
+  # pca traincongtrol
+  pca_lda_ctrl <- trainControl(method = "cv",
+                     number = 10,
+                     returnResamp = "all")
+
+  pca_lda_mod <- train(position~., data = pca_train_df,
+           method = "lda",
+           trControl = pca_lda_ctrl)
+
+  # choose the optimal k using "gap statistic"
+  
+  pca_df_num <- pca_df [ , !(names(pca_df) %in% "position")]
+
+  kcluster = clusGap(pca_df_num,FUNcluster = kmeans, nstart = 25, K.max = 15, B = 50)    
+  k_chosen <- maxSE(f = kcluster$Tab[, "gap"], SE.f = kcluster$Tab[, "SE.sim"],method="Tibs2001SEmax")
+  
+  km <- kmeans(pca_df_num, centers = k_chosen, nstart=25)
+  subset_players$cluster <-km$cluster
+  subset_players[c("player_name","cluster")]
+
+  library(ggplot2)
+  subset_players$cluster <- as.factor(subset_players$cluster)
+  subset_players$d1 <- pca_df_num$PC1
+  subset_players$d2 <- pca_df_num$PC2
+  
+  ggplot(subset_players, aes(x= d1, y= d2, colour= cluster, label=player_name))+
+    geom_point() + ggtitle("test")
+
+    if(multiple_season){
+    ggsave(paste(paste(paste(figure_dir,"/clustering",sep = ''),season_name[1],sep = '_'),'.jpg',sep=''))
+  }else{
+    
+    ggsave(paste(paste(paste(figure_dir,"/clustering",sep = ''),season_name[1],sep = '_'),'.jpg',sep=''))
+  }
+  
+  subset_players
+}
+```
+
+
+```{r}
+x = player_clustering(list("2009-10","2010-11","2011-12","2012-13","2013-14"),"/home/chenjie/Desktop/CSP571/Clustering/Figs",multiple_season = TRUE)
+write.csv(x,"/home/chenjie/Desktop/CSP571/Clustering/Figs/09-10.csv")
+
+x = player_clustering(list("2014-15","2015-16","2016-17","2017-18","2018-19"),"/home/chenjie/Desktop/CSP571/Clustering/Figs",multiple_season = TRUE)
+write.csv(x,"/home/chenjie/Desktop/CSP571/Clustering/Figs/14-18.csv")
+```

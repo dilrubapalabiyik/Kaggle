@@ -1,0 +1,19 @@
+---
+title: "Cor_Pairs"
+author: "Chenjie Li"
+date: "11/16/2019"
+output: pdf_document
+---
+
+```{r}
+cor_18 <- cor(num_players_18) # put your numerical data frame  here
+
+for (i in 1:nrow(cor_18)){
+  correlations <-  which((cor_18[i,] > 0.9) & (cor_18[i,] != 1)) # 0.9 is the threshold used to get 
+  
+  if(length(correlations)> 0){
+    print(colnames(num_players_18)[i])
+    print(correlations)
+  }
+}
+```
